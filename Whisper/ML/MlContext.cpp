@@ -120,6 +120,23 @@ namespace
 	}
 }
 
+// Same as quantTiledShader/quantByRowTiledShader, but picks the FP16-math variant
+// for the non-quantized 2D and 1-row matrix products.
+// FP16 math only when both the tensor is genuinely FP16 (applying it to FP32 weights
+// would round them to FP16 and visibly reduce precision), and the GPU has fast FP16 units.
+eComputeShader getMatMulShader( bool byRow, eDataType t )
+{
+	if( isQuantized( t ) )
+	{
+		return byRow ? quantByRowTiledShader( t ) : quantTiledShader( t );
+	}
+	else if( t == eDataType::FP16 && gpuInfo().fp16Compute() )
+	{
+		return byRow ? eComputeShader::mulMatByRowTiledF16 : eComputeShader::mulMatTiledF16;
+	}
+	return byRow ? eComputeShader::mulMatByRowTiled : eComputeShader::mulMatTiled;
+}
+
 void MlContext::mulMatTiled( const Tensor& a, const Tensor& b, Tensor& res )
 {
 	cb.update( a, b, res );
@@ -153,7 +170,7 @@ void MlContext::mulMatTiled( const Tensor& a, const Tensor& b, Tensor& res )
 			}
 			else
 			{
-				bindShader( quant ? quantByRowTiledShader( at ) : eComputeShader::mulMatByRowTiled );
+				bindShader( getMatMulShader( true, at ) );
 				constexpr uint32_t TILE_Y = 64;
 				const uint32_t groupsX = ( a.ne[ 1 ] + TILE_Y - 1 ) / TILE_Y;
 				context()->Dispatch( groupsX, a.ne[ 2 ], a.ne[ 3 ] );
@@ -173,7 +190,7 @@ void MlContext::mulMatTiled( const Tensor& a, const Tensor& b, Tensor& res )
 		// Assuming both arguments are 2D matrices.
 		// For optimal VRAM bandwidth utilization, we compute such matrix products in square tiles, a tile is 32x32 elements.
 		// Dispatching one thread group for each tile of the output matrix.
-		bindShader( quant ? quantTiledShader( at ) : eComputeShader::mulMatTiled );
+		bindShader( getMatMulShader( false, at ) );
 
 		// These compute shaders correctly handle partial tiles on the right and bottom edges of the output matrix, that's why rounding up
 		constexpr uint32_t TILE_SIZE = 32;
@@ -727,7 +744,7 @@ Tensor MlContext::mulMatTiledEx( const Tensor& a, const Tensor& b )
 	Tensor res = createTensor( eDataType::FP32, { a.ne[ 1 ], b.ne[ 1 ], a.ne[ 2 ], b.ne[ 3 ] } );
 
 	check( cb.update( a, b, res ) );
-	bindShader( eComputeShader::mulMatTiledEx );
+	bindShader( gpuInfo().fp16Compute() ? eComputeShader::mulMatTiledExF16 : eComputeShader::mulMatTiledEx );
 	cb.bind();
 
 	Binder bind;
@@ -754,7 +771,7 @@ Tensor MlContext::mulMatByRowTiledEx( const Tensor& a, const Tensor& b )
 	Tensor res = createTensor( eDataType::FP32, { a.ne[ 1 ], 1, a.ne[ 2 ], b.ne[ 3 ] } );
 
 	check( cb.update( a, b, res ) );
-	bindShader( eComputeShader::mulMatByRowTiledEx );
+	bindShader( gpuInfo().fp16Compute() ? eComputeShader::mulMatByRowTiledExF16 : eComputeShader::mulMatByRowTiledEx );
 	cb.bind();
 
 	Binder bind;

@@ -6,7 +6,7 @@
 class ModelAdvancedDlg :
 	public CDialogImpl<ModelAdvancedDlg>
 {
-	CComboBox cbWave, cbReshapedMatMul, cbAdapter;
+	CComboBox cbWave, cbReshapedMatMul, cbFp16, cbAdapter;
 	AppState& appState;
 
 public:

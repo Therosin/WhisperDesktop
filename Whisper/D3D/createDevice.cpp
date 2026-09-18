@@ -5,6 +5,27 @@
 #pragma comment(lib, "D3D11.lib")
 #include <atlstr.h>
 
+namespace
+{
+	// Whisper inference is a throughput workload and does not need low latency;
+	// the desktop/compositor does. A negative GPU thread priority makes WDDM schedule
+	// other processes' graphics work (browser presentation, video) ahead of our
+	// long D3D11 compute dispatches, trading a little transcription speed for
+	// smooth desktop. Range is [-7..7], see IDXGIDevice::SetGPUThreadPriority.
+	// Prefer mild values, profiling shows -1..-3 to be a good compromise on AMD iGPU.
+	inline constexpr INT kGpuThreadPriority = -2;
+
+	void __stdcall setGpuThreadPriority( ID3D11Device* dev )
+	{
+		CComPtr<IDXGIDevice> dxgiDevice;
+		if( FAILED( dev->QueryInterface( &dxgiDevice ) ) )
+			return;
+		HRESULT hr = dxgiDevice->SetGPUThreadPriority( kGpuThreadPriority );
+		if( SUCCEEDED( hr ) && willLogMessage( Whisper::eLogLevel::Debug ) )
+			logDebug16( L"D3D11: set GPU thread priority to %2d", kGpuThreadPriority );
+	}
+}
+
 HRESULT DirectCompute::createDevice( const std::wstring& adapterName, ID3D11Device** dev, ID3D11DeviceContext** context )
 {
 	CComPtr<IDXGIAdapter1> adapter = selectAdapter( adapterName );
@@ -24,14 +45,20 @@ HRESULT DirectCompute::createDevice( const std::wstring& adapterName, ID3D11Devi
 	constexpr UINT levelsCount = (UINT)levels.size();
 	HRESULT hr = D3D11CreateDevice( adapter, driverType, nullptr, flags, levels.data(), levelsCount, D3D11_SDK_VERSION, dev, nullptr, context );
 	if( SUCCEEDED( hr ) )
+	{
+		setGpuThreadPriority( *dev );
 		return S_OK;
+	}
 	// D3D11_CREATE_DEVICE_DISABLE_GPU_TIMEOUT: This value is not supported until Direct3D 11.1
 	// https://learn.microsoft.com/en-us/windows/win32/api/d3d11/ne-d3d11-d3d11_create_device_flag
 	flags = _andn_u32( D3D11_CREATE_DEVICE_DISABLE_GPU_TIMEOUT, flags );
 
 	hr = D3D11CreateDevice( adapter, driverType, nullptr, flags, levels.data(), levelsCount, D3D11_SDK_VERSION, dev, nullptr, context );
 	if( SUCCEEDED( hr ) )
+	{
+		setGpuThreadPriority( *dev );
 		return S_OK;
+	}
 	return hr;
 }
 
@@ -85,6 +112,13 @@ HRESULT DirectCompute::validateFlags( uint32_t flags )
 		logError( u8"eGpuModelFlags.%s and eGpuModelFlags.%s are mutually exclusive", "NoReshapedMatMul", "UseReshapedMatMul" );
 		return E_INVALIDARG;
 	}
+
+	constexpr uint32_t fp16Both = eGpuModelFlags::NoFp16Compute | eGpuModelFlags::UseFp16Compute;
+	if( ( flags & fp16Both ) == fp16Both )
+	{
+		logError( u8"eGpuModelFlags.%s and eGpuModelFlags.%s are mutually exclusive", "NoFp16Compute", "UseFp16Compute" );
+		return E_INVALIDARG;
+	}
 	return S_OK;
 }
 
@@ -122,6 +156,13 @@ HRESULT DirectCompute::queryDeviceInfo( sGpuInfo& rdi, ID3D11Device* dev, uint32
 		ef |= (uint8_t)eGpuEffectiveFlags::ReshapedMatMul;
 	if( 0 != ( flags & eGpuModelFlags::Cloneable ) )
 		ef |= (uint8_t)eGpuEffectiveFlags::Cloneable;
+
+	// FP16 math for matmul shaders. Both AMD and nVidia have had 2x-throughput FP16 units
+	// for years (Ryzen iGPU / Vega / RDNA and Pascal / Turing / Ada). Even when the driver
+	// doesn't map min16float to real FP16 ops, it degrades to FP32 with no loss of precision.
+	const bool fp16Default = amd || ( rdi.vendor == eGpuVendor::NVidia );
+	if( merge3( flags, eGpuModelFlags::UseFp16Compute, eGpuModelFlags::NoFp16Compute, fp16Default ) )
+		ef |= (uint8_t)eGpuEffectiveFlags::Fp16Compute;
 	rdi.flags = (eGpuEffectiveFlags)ef;
 
 	if( willLogMessage( Whisper::eLogLevel::Debug ) )
@@ -135,6 +176,8 @@ HRESULT DirectCompute::queryDeviceInfo( sGpuInfo& rdi, ID3D11Device* dev, uint32
 			rdi.useReshapedMatMul() ? "UseReshapedMatMul" : "NoReshapedMatMul" );
 		if( rdi.cloneableModel() )
 			flagsString += " | Cloneable";
+		if( rdi.fp16Compute() )
+			flagsString += " | Fp16Compute";
 
 		logDebug16( L"Using GPU \"%s\", feature level %i.%i, effective flags %S",
 			rdi.description.c_str(), flMajor, flMinor,

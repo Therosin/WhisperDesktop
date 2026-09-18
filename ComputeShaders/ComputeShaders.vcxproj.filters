@@ -46,8 +46,12 @@
     <FxCompile Include="addRows.hlsl" />
     <FxCompile Include="zeroMemory.hlsl" />
     <FxCompile Include="mulMatTiledEx.hlsl" />
+    <FxCompile Include="mulMatTiledExF16.hlsl" />
+    <FxCompile Include="mulMatTiledF16.hlsl" />
     <FxCompile Include="matReshapePanels.hlsl" />
     <FxCompile Include="mulMatByRowTiledEx.hlsl" />
+    <FxCompile Include="mulMatByRowTiledExF16.hlsl" />
+    <FxCompile Include="mulMatByRowTiledF16.hlsl" />
     <FxCompile Include="addRepeatEx.hlsl" />
     <FxCompile Include="softMaxLong.hlsl" />
     <FxCompile Include="dbgFindNaN.hlsl" />

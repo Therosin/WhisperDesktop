@@ -13,6 +13,17 @@ static const uint THREADS_X = 32;
 static const uint THREADS_Y = 16;
 #endif
 
+#ifdef F16_MATH
+// FP16 math variant: operands and partial accumulators are min-precision FP16,
+// converted to FP32 once per block. FP16 FMA runs at 2x rate on GPUs which support it;
+// on other GPUs min16float degrades to FP32 and the numerics stay the same.
+#define G_TYPE min16float
+#define G_TYPE4 min16float4
+#else
+#define G_TYPE float
+#define G_TYPE4 float4
+#endif
+
 #ifdef QUANT_TYPE
 #include "dequant.hlsli"
 // Block-quantized weight: raw R32_UINT view, dequantized inline per element.
@@ -93,7 +104,11 @@ void main( uint3 group: SV_GroupID, uint3 thread : SV_GroupThreadID )
 					v0[ j ] = LOAD_A( rsi );
 			}
 			// Multiply + accumulate
+#ifdef F16_MATH
+			acc[ i ] += ( float4 )( ( G_TYPE4 )v0 * ( G_TYPE )v1 );
+#else
 			acc[ i ] = mad( v0, v1, acc[ i ] );
+#endif
 		}
 	}
 
@@ -119,7 +134,11 @@ void main( uint3 group: SV_GroupID, uint3 thread : SV_GroupThreadID )
 					v0[ j ] = LOAD_A( s0 );
 			}
 			// Multiply + accumulate
+#ifdef F16_MATH
+			acc[ i ] += ( float4 )( ( G_TYPE4 )v0 * ( G_TYPE )v1 );
+#else
 			acc[ i ] = mad( v0, v1, acc[ i ] );
+#endif
 		}
 	}
 

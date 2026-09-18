@@ -6,6 +6,9 @@
 #include <mfidl.h>
 #include <mfapi.h>
 #include <mfreadwrite.h>
+#include <deque>
+#include <memory>
+#include <thread>
 #include "voiceActivityDetection.h"
 
 namespace
@@ -71,17 +74,15 @@ namespace
 	class Capture
 	{
 		CComPtr<IMFSourceReader> reader;
+		// Non-null when the source is the WASAPI loopback capture, pulls PCM directly
+		ComLight::CComPtr<iWasmCapture> wasm;
 		const CaptureParams captureParams;
 		const sCaptureCallbacks callbacks;
 		// Count of channels delivered from the source reader
 		uint8_t readerChannels = 0;
 		volatile char stateFlags = 0;
 
-		PTP_WORK work = nullptr;
-		volatile HRESULT workStatus = S_OK;
-
-		TranscribeBufferObj buffer;
-		CComAutoCriticalSection critSec;
+		mutable CComAutoCriticalSection critSec;
 		AudioBuffer pcm;
 		AudioBuffer::pfnAppendSamples pfnAppendSamples = nullptr;
 		int64_t pcmStartTime = 0;
@@ -90,6 +91,20 @@ namespace
 		sFullParams fullParams;
 		ProfileCollection& profiler;
 		iContext* const whisperContext;
+
+		// Queue of PCM chunks waiting for the transcription thread. Capture never drops data:
+		// while the model is busy, audio keeps being spooled here as fixed-size chunks.
+		std::deque<std::unique_ptr<TranscribeBufferObj>> queue;
+		HANDLE queueEvent = nullptr;
+		std::thread worker;
+		std::atomic_bool stopWorker { false };
+		volatile HRESULT lastError = S_OK;
+
+		// Detach the current PCM buffer and hand it over to the transcription thread.
+		HRESULT submitChunk();
+
+		// The transcription thread: pops chunks from the queue, runs the model on them in order.
+		void workerMain();
 
 		// Set the state bit, and if needed notify user with the callback.
 		HRESULT setStateFlag( eCaptureStatus newBit ) noexcept
@@ -122,29 +137,11 @@ namespace
 			return 0 != ( (uint8_t)stateFlags & bit );
 		}
 
-		HRESULT workCallback();
-		static void __stdcall callbackStatic( PTP_CALLBACK_INSTANCE Instance, PVOID pv, PTP_WORK Work );
-
-		HRESULT readSample( bool discard );
+		HRESULT readSample();
 
 		// Run voice detection on the data in pcm.mono vector.
 		// When not detected, return 0. When detected, return last frame index where it is detected.
 		size_t detectVoice();
-
-		HRESULT postPoolWork()
-		{
-			assert( workStatus == S_OK );
-			CHECK( setStateFlag( eCaptureStatus::Transcribing ) );
-
-			workStatus = S_FALSE;
-			buffer.currentOffset = pcmStartTime;
-			pcm.swap( buffer.pcm );
-			SubmitThreadpoolWork( work );
-			pcmStartTime = nextSampleTime;
-			pcm.clear();
-			vad.clear();
-			return S_OK;
-		}
 
 	public:
 		Capture( const sCaptureCallbacks& cb, const iAudioCapture* ac, const sFullParams& sfp, iContext* wc, ProfileCollection& pc ) :
@@ -156,13 +153,17 @@ namespace
 
 		~Capture()
 		{
-			if( workStatus == S_FALSE && nullptr != work )
-				WaitForThreadpoolWorkCallbacks( work, FALSE );
-
-			if( nullptr != work )
+			// Stop the transcription thread. It keeps processing any remaining queued chunks,
+			// so nothing captured is ever lost.
+			stopWorker = true;
+			if( nullptr != queueEvent )
+				SetEvent( queueEvent );
+			if( worker.joinable() )
+				worker.join();
+			if( nullptr != queueEvent )
 			{
-				CloseThreadpoolWork( work );
-				work = nullptr;
+				CloseHandle( queueEvent );
+				queueEvent = nullptr;
 			}
 		}
 
@@ -180,11 +181,39 @@ namespace
 
 	HRESULT Capture::startup( const iAudioCapture* ac )
 	{
+		// One transcription thread consumes the queued PCM chunks in order
+		queueEvent = CreateEvent( nullptr, FALSE, FALSE, nullptr );
+		if( nullptr == queueEvent )
+			return HRESULT_FROM_WIN32( GetLastError() );
+
+		stopWorker = false;
+		try
+		{
+			worker = std::thread( &Capture::workerMain, this );
+		}
+		catch( const std::system_error& ex )
+		{
+			CloseHandle( queueEvent );
+			queueEvent = nullptr;
+			return HRESULT_FROM_WIN32( ex.code().value() );
+		}
+
+		// The WASAPI system-audio source implements an optional extra interface; use it when present.
+		if( SUCCEEDED( const_cast<iAudioCapture*>( ac )->QueryInterface( iWasmCapture::iid(), (void**)&wasm ) ) )
+		{
+			// The WASAPI source already delivers resampled 16 kHz float PCM, 1 or 2 channels
+			const uint32_t channels = wasm->channels();
+			const bool sourceMono = channels < 2;
+			const bool wantStereo = 0 != ( captureParams.flags & (uint32_t)eCaptureFlags::Stereo );
+			pfnAppendSamples = AudioBuffer::appendSamplesFunc( sourceMono, wantStereo );
+			readerChannels = ( !sourceMono && wantStereo ) ? 2 : 1;
+
+			CHECK( setStateFlag( eCaptureStatus::Listening ) );
+			return S_OK;
+		}
+
 		// Initialize the MF source reader
 		CHECK( ac->getReader( &reader ) );
-		work = CreateThreadpoolWork( &callbackStatic, this, nullptr );
-		if( nullptr == work )
-			return HRESULT_FROM_WIN32( GetLastError() );
 
 		// Set up media type, and figure out sample handler
 		CHECK( reader->SetStreamSelection( MF_SOURCE_READER_ALL_STREAMS, FALSE ) );
@@ -208,30 +237,20 @@ namespace
 		return S_OK;
 	}
 
-	// This method is called in a loop until user stops the audio capture
+	// This method is called in a loop until user stops the audio capture.
+	// It never blocks on the model: chunks are detached and handed to the transcription
+	// thread, which may lag behind but is guaranteed to consume every captured sample.
 	HRESULT Capture::run()
 	{
-		HRESULT hr;
-		if( hasStateFlag( eCaptureStatus::Stalled ) )
+		const HRESULT e = lastError;
+		if( FAILED( e ) )
 		{
-			hr = workStatus;
-			CHECK( hr );
-			if( S_OK != hr )
-			{
-				// Still stalled, discard the upcoming sample
-				return readSample( true );
-			}
-			else
-			{
-				// The postponed task has completed by now, no longer stalled
-				// Move the current PCM buffer to the transcribe thread
-				CHECK( clearStateFlag( eCaptureStatus::Stalled ) );
-				return postPoolWork();
-			}
+			lastError = S_OK;
+			return e;
 		}
 
 		const size_t oldSamples = pcm.mono.size();
-		CHECK( readSample( false ) );
+		CHECK( readSample() );
 		const size_t newSamples = pcm.mono.size();
 
 		const size_t lastVoiceFrame = detectVoice();
@@ -255,40 +274,38 @@ namespace
 			// A voice is detected in the buffer, and it was fairly recently
 			setStateFlag( eCaptureStatus::Voice );
 			if( newSamples < captureParams.maxDuration )
-				return S_OK;	// While voice is continuously detected, we allow to grow the buffer up to `maxDuration` time
+				return S_OK;	// While voice is continuously detected, allow the buffer to grow up to `maxDuration` time
 		}
 		else
 		{
 			// A voice is detected in the buffer, but it was a while ago
 			clearStateFlag( eCaptureStatus::Voice );
-			if( newSamples < captureParams.minDuration )
-				return S_OK;	// When detected pause in the voice, we fire the transcribe task right away.
+			if( newSamples < captureParams.minDuration && lastVoiceFrame < captureParams.minDuration )
+				return S_OK;	// Not enough audio yet; keep buffering up to the `minDuration` floor
 		}
 
-		// Hopefully, we have enough captured PCM data to run the ASR model.
-		// Check the background task status first.
-		hr = workStatus;
-		CHECK( hr );
-		if( hr == S_OK )
-		{
-			// S_OK workStatus means the previously posted transcribe job has completed successfully by now
-			return postPoolWork();
-		}
-
-		// S_FALSE means the previously posted transcribe job is still running
-		// Allow the buffer to grow up to maxDuration length, before starting to drop the samples
-		if( newSamples < captureParams.maxDuration )
-			return S_OK;
-
-		// The previous task has not finished yet, but we don't want to grow the buffer even further.
-		// We don't want concurrent transcribes here because not implemented, will simply crash.
-		// Set the "Stalled" flag which causes capture to drop further samples
-		setStateFlag( eCaptureStatus::Stalled );
-		return S_OK;
+		// Enough captured PCM data to run the ASR model
+		return submitChunk();
 	}
 
-	HRESULT Capture::readSample( bool discard )
+	HRESULT Capture::readSample()
 	{
+		if( wasm )
+		{
+			// WASAPI loopback: pull the next resampled 16 kHz float chunk
+			const float* pData = nullptr;
+			size_t countFloats = 0;
+			CHECK( wasm->getSample( &pData, countFloats ) );
+			if( countFloats > 0 )
+			{
+				const size_t prevSize = pcm.mono.size();
+				( pcm.*pfnAppendSamples )( pData, countFloats );
+				const size_t newSize = pcm.mono.size();
+				this->nextSampleTime += ( newSize - prevSize );
+			}
+			return S_OK;
+		}
+
 		while( true )
 		{
 			DWORD dwFlags = 0;
@@ -330,17 +347,10 @@ namespace
 			{
 				assert( 0 == ( cbBuffer % sizeof( float ) ) );
 				const size_t countFloats = cbBuffer / sizeof( float );
-				if( !discard )
-				{
-					const size_t prevSize = pcm.mono.size();
-					( pcm.*pfnAppendSamples )( pAudioData, countFloats );
-					const size_t newSize = pcm.mono.size();
-					this->nextSampleTime += ( newSize - prevSize );
-				}
-				else
-				{
-					this->nextSampleTime += countFloats / readerChannels;
-				}
+				const size_t prevSize = pcm.mono.size();
+				( pcm.*pfnAppendSamples )( pAudioData, countFloats );
+				const size_t newSize = pcm.mono.size();
+				this->nextSampleTime += ( newSize - prevSize );
 			}
 			catch( const std::bad_alloc& )
 			{
@@ -357,35 +367,87 @@ namespace
 		}
 	}
 
-	HRESULT Capture::workCallback()
+	HRESULT Capture::submitChunk()
 	{
-		CHECK( whisperContext->runFull( fullParams, &buffer ) );
-		CHECK( clearStateFlag( eCaptureStatus::Transcribing ) );
+		if( pcm.mono.empty() )
+			return S_OK;
+
+		std::unique_ptr<TranscribeBufferObj> chunk( new TranscribeBufferObj() );
+		chunk->currentOffset = pcmStartTime;
+		pcm.swap( chunk->pcm );
+		pcmStartTime = nextSampleTime;
+		pcm.clear();
+		vad.clear();
+
+		CHECK( setStateFlag( eCaptureStatus::Transcribing ) );
+
+		{
+			using lock = CComCritSecLock<CComAutoCriticalSection>;
+			lock critSec0{ critSec };
+			queue.push_back( std::move( chunk ) );
+		}
+		SetEvent( queueEvent );
 		return S_OK;
 	}
 
-	void __stdcall Capture::callbackStatic( PTP_CALLBACK_INSTANCE Instance, PVOID pv, PTP_WORK Work )
+	void Capture::workerMain()
 	{
-		Capture* pThis = (Capture*)pv;
-		HRESULT status = E_UNEXPECTED;
-		try
+		for( ;; )
 		{
-			status = pThis->workCallback();
+			std::unique_ptr<TranscribeBufferObj> chunk;
+			{
+				using lock = CComCritSecLock<CComAutoCriticalSection>;
+				lock critSec0{ critSec };
+				if( !queue.empty() )
+				{
+					chunk = std::move( queue.front() );
+					queue.pop_front();
+				}
+			}
+
+			if( chunk )
+			{
+				HRESULT status = E_UNEXPECTED;
+				try
+				{
+					status = whisperContext->runFull( fullParams, chunk.get() );
+				}
+				catch( HRESULT hr )
+				{
+					status = hr;
+				}
+				catch( const std::bad_alloc& )
+				{
+					status = E_OUTOFMEMORY;
+				}
+				catch( const std::exception& )
+				{
+					status = E_FAIL;
+				}
+
+				if( FAILED( status ) )
+				{
+					logErrorHr( status, u8"Failed to transcribe a captured chunk" );
+					lastError = status;
+				}
+
+				// When the queue is drained, the busy indicator can go away.
+				// New chunks submitted in the meantime keep the flag set.
+				bool drained = false;
+				{
+					using lock = CComCritSecLock<CComAutoCriticalSection>;
+					lock critSec0{ critSec };
+					drained = queue.empty();
+				}
+				if( drained )
+					clearStateFlag( eCaptureStatus::Transcribing );
+				continue;
+			}
+
+			if( stopWorker )
+				break;
+			WaitForSingleObject( queueEvent, INFINITE );
 		}
-		catch( HRESULT hr )
-		{
-			status = hr;
-		}
-		catch( const std::bad_alloc& )
-		{
-			status = E_OUTOFMEMORY;
-		}
-		catch( const std::exception& )
-		{
-			status = E_FAIL;
-		}
-		assert( S_OK == status || FAILED( status ) );
-		pThis->workStatus = status;
 	}
 
 	size_t Capture::detectVoice()

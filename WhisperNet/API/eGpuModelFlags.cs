@@ -31,5 +31,14 @@ namespace Whisper
 
 		/// <summary>Create GPU tensors in a way which allows sharing across D3D devices</summary>
 		Cloneable = 0x10,
+
+		/// <summary>Do not use the FP16 math compute shaders for matrix multiplication</summary>
+		/// <remarks>Incompatible with <see cref="UseFp16Compute" /></remarks>
+		NoFp16Compute = 0x20,
+
+		/// <summary>Use the FP16 math compute shaders for matrix multiplication even on GPUs where<br/>
+		/// that optimization is disabled by default</summary>
+		/// <remarks>Incompatible with <see cref="NoFp16Compute" /></remarks>
+		UseFp16Compute = 0x40,
 	}
 }

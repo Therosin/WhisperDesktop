@@ -24,6 +24,8 @@ namespace Whisper
 		NoReshapedMatMul = 4,
 		UseReshapedMatMul = 8,
 		Cloneable = 0x10,
+		NoFp16Compute = 0x20,
+		UseFp16Compute = 0x40,
 	};
 
 	struct sModelSetup

@@ -26,6 +26,17 @@ static const uint THREADS_Y = 8;
 
 #endif
 
+#ifdef F16_MATH
+// FP16 math variant: operands and partial accumulators are min-precision FP16,
+// converted to FP32 once per tile. FP16 FMA runs at 2x rate on GPUs which support it;
+// on other GPUs min16float degrades to FP32 and the numerics stay the same.
+#define G_TYPE min16float
+#define G_TYPE4 min16float4
+#else
+#define G_TYPE float
+#define G_TYPE4 float4
+#endif
+
 #ifdef QUANT_TYPE
 #include "dequant.hlsli"
 // Block-quantized weight: raw R32_UINT view, dequantized inline per element.
@@ -47,9 +58,9 @@ cbuffer Constants: register( b0 )
 	uint4 resultStrides: packoffset( c5 );
 }
 
-groupshared float tile0[ TILE_SIZE ][ TILE_SIZE ];
+groupshared G_TYPE tile0[ TILE_SIZE ][ TILE_SIZE ];
 #if !STREAM_SECOND_MATRIX
-groupshared float tile1[ TILE_SIZE ][ TILE_SIZE ];
+groupshared G_TYPE tile1[ TILE_SIZE ][ TILE_SIZE ];
 #endif
 
 // Count of FP32 accumulators we need in every thread of the shader
@@ -64,13 +75,13 @@ void multiplyTiles( uint rsi, const uint3 thread, const uint w, const uint h, in
 	[unroll]
 	for( uint iv = 0; iv < heightVectors; iv++, rsi4 += THREADS_Y * 4 * arg1Strides.y )
 	{
-		float4 r = 0;
+		G_TYPE4 r = 0;
 		uint4 rsiRow = rsi4;
 		for( uint j = 0; j < w; j++, rsiRow += arg1Strides.x )
 		{
 			// One TILE_SIZE * 4 bytes coalesced load, broadcasted into THREADS_Y copies
-			const float s0 = tile0[ j ][ thread.x ];
-			float4 s1 = 0.0;
+			const G_TYPE s0 = tile0[ j ][ thread.x ];
+			G_TYPE4 s1 = 0.0;
 			[unroll]
 			for( uint k = 0; k < 4; k++ )
 			{
@@ -93,12 +104,12 @@ void multiplyTiles( const uint3 thread, inout float4 acc[ heightVectors ] )
 	[unroll]
 	for( uint iv = 0; iv < heightVectors; iv++ )
 	{
-		float4 r = 0;
+		G_TYPE4 r = 0;
 		for( uint j = 0; j < TILE_SIZE; j++ )
 		{
 			// One TILE_SIZE * 4 bytes coalesced load, broadcasted into THREADS_Y copies
-			const float s0 = tile0[ j ][ thread.x ];
-			float4 s1;
+			const G_TYPE s0 = tile0[ j ][ thread.x ];
+			G_TYPE4 s1;
 			[unroll]
 			for( uint k = 0; k < 4; k++ )
 			{

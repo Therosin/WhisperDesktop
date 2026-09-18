@@ -17,6 +17,7 @@ namespace DirectCompute
 		Wave64 = 1,
 		ReshapedMatMul = 2,
 		Cloneable = 4,
+		Fp16Compute = 8,
 	};
 
 	struct sGpuInfo
@@ -46,6 +47,13 @@ namespace DirectCompute
 		inline bool cloneableModel() const
 		{
 			return 0 != ( (uint8_t)flags & (uint8_t)eGpuEffectiveFlags::Cloneable );
+		}
+
+		// Whether matmul compute shaders run in FP16 math, effectively doubling the throughput
+		// on Pascal/Turing and later nVidia GPUs, and Ryzen integrated / Vega / RDNA AMD GPUs.
+		inline bool fp16Compute() const
+		{
+			return 0 != ( (uint8_t)flags & (uint8_t)eGpuEffectiveFlags::Fp16Compute );
 		}
 	};
 }

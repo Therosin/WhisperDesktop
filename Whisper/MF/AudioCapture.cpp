@@ -4,12 +4,17 @@
 #include <mfidl.h>
 #include <mfreadwrite.h>
 #include "AudioCapture.h"
+#include "wasapiCapture.h"
 #include "../API/iMediaFoundation.cl.h"
 #include "../ComLightLib/comLightServer.h"
 #pragma comment(lib, "Mf.lib")
 
 namespace
 {
+	// Virtual capture device implemented with WASAPI loopback on the default render endpoint
+	const wchar_t kSystemAudioName[] = L"System Audio";
+	const wchar_t kSystemAudioEndpoint[] = L"system-audio-loopback";
+
 	struct Strings
 	{
 		CString displayName, endpoint;
@@ -35,29 +40,32 @@ namespace
 
 	HRESULT __stdcall supplyDevices( Whisper::pfnFoundCaptureDevices pfn, void* pv, IMFActivate** ppDevices, UINT32 count )
 	{
-		if( ppDevices == nullptr || count == 0 )
-			return pfn( 0, nullptr, pv );
-
 		std::vector<Strings> strings;
-		strings.reserve( count );
+		strings.reserve( ( count > 0 ? count : 0 ) + 1 );
 
-		for( UINT i = 0; i < count; i++ )
+		if( ppDevices != nullptr && count > 0 )
 		{
-			IMFActivate* const activate = ppDevices[ i ];
-			if( nullptr == activate )
-				continue;
-			Strings info;
-			HRESULT hr = getInfo( activate, info );
-			if( FAILED( hr ) )
-				continue;
+			for( UINT i = 0; i < count; i++ )
+			{
+				IMFActivate* const activate = ppDevices[ i ];
+				if( nullptr == activate )
+					continue;
+				Strings info;
+				HRESULT hr = getInfo( activate, info );
+				if( FAILED( hr ) )
+					continue;
 
-			strings.emplace_back( std::move( info ) );
+				strings.emplace_back( std::move( info ) );
+			}
 		}
 
-		const size_t len = strings.size();
-		if( 0 == len )
-			return pfn( 0, nullptr, pv );
+		// Append a virtual device capturing whatever the speakers are playing.
+		// The static strings stay valid for the lifetime of the process.
+		Strings& systemAudio = strings.emplace_back();
+		systemAudio.displayName = kSystemAudioName;
+		systemAudio.endpoint = kSystemAudioEndpoint;
 
+		const size_t len = strings.size();
 		std::vector<Whisper::sCaptureDevice> pointers;
 		pointers.resize( len );
 		for( size_t i = 0; i < len; i++ )
@@ -157,6 +165,10 @@ HRESULT __stdcall Whisper::captureOpen( iMediaFoundation* owner, const wchar_t* 
 {
 	if( nullptr == endpoint || nullptr == pp )
 		return E_POINTER;
+
+	// Virtual "System Audio" source: implement with WASAPI loopback instead of Media Foundation
+	if( 0 == wcscmp( endpoint, kSystemAudioEndpoint ) )
+		return captureOpenSystemAudio( captureParams, pp );
 
 	ComLight::CComPtr<ComLight::Object<Capture>> res;
 	CHECK( ComLight::Object<Capture>::create( res ) );

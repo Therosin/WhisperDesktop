@@ -51,7 +51,7 @@ LRESULT TranscribeDlg::OnInitDialog( UINT nMessage, WPARAM wParam, LPARAM lParam
 	HRESULT hr = work.create( this );
 	if( FAILED( hr ) )
 	{
-		reportError( m_hWnd, L"创建线程池工作失败", nullptr, hr );
+		reportError( m_hWnd, L"Failed to create the thread pool work", nullptr, hr );
 		EndDialog( IDCANCEL );
 	}
 
@@ -76,14 +76,14 @@ void TranscribeDlg::printModelDescription()
 {
 	CString text;
 	if( S_OK == appState.model->isMultilingual() )
-		text = L"多语言";
+		text = L"multilingual";
 	else
-		text = L"单语言";
-	text += L" 模型 \"";
+		text = L"single-language";
+	text += L" model \"";
 	LPCTSTR path = appState.source.path;
 	path = ::PathFindFileName( path );
 	text += path;
-	text += L"\", 占用";
+	text += L"\", ";
 	const int64_t cb = appState.source.sizeInBytes;
 	if( cb < 1 << 30 )
 	{
@@ -99,7 +99,7 @@ void TranscribeDlg::printModelDescription()
 	}
 	text += L", ";
 	text += implString( appState.source.impl );
-	text += L" 实现";
+	text += L" implementation";
 
 	modelDesc.SetWindowText( text );
 }
@@ -107,11 +107,11 @@ void TranscribeDlg::printModelDescription()
 // Populate the "Output Format" combobox
 void TranscribeDlg::populateOutputFormats()
 {
-	transcribeOutFormat.AddString( L"无" );
-	transcribeOutFormat.AddString( L"文本文件" );
-	transcribeOutFormat.AddString( L"带时间戳的文本" );
-	transcribeOutFormat.AddString( L"SubRip 字幕" );
-	transcribeOutFormat.AddString( L"WebVTT 字幕" );
+	transcribeOutFormat.AddString( L"None" );
+	transcribeOutFormat.AddString( L"Text file" );
+	transcribeOutFormat.AddString( L"Text with timestamps" );
+	transcribeOutFormat.AddString( L"SubRip subtitles" );
+	transcribeOutFormat.AddString( L"WebVTT subtitles" );
 }
 
 // The enum values should match 0-based indices of the combobox items
@@ -161,8 +161,8 @@ LRESULT TranscribeDlg::onInputChange( UINT, INT, HWND, BOOL& )
 
 void TranscribeDlg::onBrowseMedia()
 {
-	LPCTSTR title = L"选择音频文件";
-	LPCTSTR filters = L"多媒体文件\0*.wav;*.wave;*.mp3;*.wma;*.mp4;*.mpeg4;*.mkv;*.m4a\0\0";
+	LPCTSTR title = L"Select audio file";
+	LPCTSTR filters = L"Media files\0*.wav;*.wave;*.mp3;*.wma;*.mp4;*.mpeg4;*.mkv;*.m4a\0\0";
 
 	CString path;
 	sourceMediaPath.GetWindowText( path );
@@ -173,7 +173,7 @@ void TranscribeDlg::onBrowseMedia()
 		setOutputPath( path );
 }
 
-static const LPCTSTR outputFilters = L"文本文件 (*.txt)\0*.txt\0带时间戳的文本 (*.txt)\0*.txt\0SubRip 字幕 (*.srt)\0*.srt\0WebVTT 字幕 (*.vtt)\0*.vtt\0\0";
+static const LPCTSTR outputFilters = L"Text file (*.txt)\0*.txt\0Text with timestamps (*.txt)\0*.txt\0SubRip subtitles (*.srt)\0*.srt\0WebVTT subtitles (*.vtt)\0*.vtt\0\0";
 static const std::array<LPCTSTR, 4> outputExtensions =
 {
 	L".txt", L".txt", L".srt", L".vtt"
@@ -221,7 +221,7 @@ void TranscribeDlg::onBrowseOutput()
 {
 	const DWORD origFilterIndex = (DWORD)transcribeOutFormat.GetCurSel() - 1;
 
-	LPCTSTR title = L"输出文本文件";
+	LPCTSTR title = L"Output text file";
 	CString path;
 	transcribeOutputPath.GetWindowText( path );
 	DWORD filterIndex = origFilterIndex;
@@ -248,7 +248,7 @@ void TranscribeDlg::setPending( bool nowPending )
 
 void TranscribeDlg::transcribeError( LPCTSTR text, HRESULT hr )
 {
-	reportError( m_hWnd, text, L"无法转写文件", hr );
+	reportError( m_hWnd, text, L"Failed to transcribe the file", hr );
 }
 
 void TranscribeDlg::onTranscribe()
@@ -267,13 +267,13 @@ void TranscribeDlg::onTranscribe()
 	sourceMediaPath.GetWindowText( transcribeArgs.pathMedia );
 	if( transcribeArgs.pathMedia.GetLength() <= 0 )
 	{
-		transcribeError( L"请选择一个音频文件" );
+		transcribeError( L"Please select an audio file" );
 		return;
 	}
 
 	if( !PathFileExists( transcribeArgs.pathMedia ) )
 	{
-		transcribeError( L"选择的音频文件不存在", HRESULT_FROM_WIN32( ERROR_FILE_NOT_FOUND ) );
+		transcribeError( L"The selected audio file does not exist", HRESULT_FROM_WIN32( ERROR_FILE_NOT_FOUND ) );
 		return;
 	}
 
@@ -288,12 +288,12 @@ void TranscribeDlg::onTranscribe()
 		transcribeOutputPath.GetWindowText( transcribeArgs.pathOutput );
 		if( transcribeArgs.pathOutput.GetLength() <= 0 )
 		{
-			transcribeError( L"请选择用于输出的文本文档" );
+			transcribeError( L"Please select the output text file" );
 			return;
 		}
 		if( PathFileExists( transcribeArgs.pathOutput ) )
 		{
-			const int resp = MessageBox( L"输出文件已存在。\n覆盖文件？", L"确认覆盖", MB_ICONQUESTION | MB_YESNO );
+			const int resp = MessageBox( L"The output file already exists.\nOverwrite it?", L"Confirm overwrite", MB_ICONQUESTION | MB_YESNO );
 			if( resp != IDYES )
 				return;
 		}
@@ -310,7 +310,7 @@ void TranscribeDlg::onTranscribe()
 
 	setPending( true );
 	transcribeArgs.visualState = eVisualState::Running;
-	transcribeButton.SetWindowText( L"停止" );
+	transcribeButton.SetWindowText( L"Stop" );
 	work.post();
 }
 
@@ -327,7 +327,7 @@ static void printTime( CString& rdi, int64_t ticks )
 
 	if( fields.days != 0 )
 	{
-		rdi.AppendFormat( L"%i 天, %i 小时", fields.days, (int)fields.hours );
+		rdi.AppendFormat( L"%i days, %i hours", fields.days, (int)fields.hours );
 		return;
 	}
 	if( ( fields.hours | fields.minutes ) != 0 )
@@ -335,13 +335,13 @@ static void printTime( CString& rdi, int64_t ticks )
 		rdi.AppendFormat( L"%02d:%02d:%02d", (int)fields.hours, (int)fields.minutes, (int)fields.seconds );
 		return;
 	}
-	rdi.AppendFormat( L"%.3f 秒", (double)ticks / 1E7 );
+	rdi.AppendFormat( L"%.3f seconds", (double)ticks / 1E7 );
 }
 
 LRESULT TranscribeDlg::onCallbackStatus( UINT, WPARAM wParam, LPARAM, BOOL& bHandled )
 {
 	setPending( false );
-	transcribeButton.SetWindowText( L"转写" );
+	transcribeButton.SetWindowText( L"Transcribe" );
 	transcribeButton.EnableWindow( TRUE );
 	const bool prematurely = ( transcribeArgs.visualState == eVisualState::Stopping );
 	transcribeArgs.visualState = eVisualState::Idle;
@@ -349,7 +349,7 @@ LRESULT TranscribeDlg::onCallbackStatus( UINT, WPARAM wParam, LPARAM, BOOL& bHan
 	const HRESULT hr = (HRESULT)wParam;
 	if( FAILED( hr ) )
 	{
-		LPCTSTR failMessage = L"转写失败";
+		LPCTSTR failMessage = L"Transcription failed";
 
 		if( transcribeArgs.errorMessage.GetLength() > 0 )
 		{
@@ -368,18 +368,18 @@ LRESULT TranscribeDlg::onCallbackStatus( UINT, WPARAM wParam, LPARAM, BOOL& bHan
 	const int64_t media = transcribeArgs.mediaDuration;
 	CString message;
 	if( prematurely )
-		message = L"转写了音频的初始部分";
+		message = L"Transcribed the initial part of the audio";
 	else
-		message = L"转写了音频";
-	message += L"\n媒体时长: ";
+		message = L"Transcribed the audio";
+	message += L"\nMedia duration: ";
 	printTime( message, media );
-	message += L"\n处理时间: ";
+	message += L"\nProcessing time: ";
 	printTime( message, elapsed );
-	message += L"\n相对处理速度: ";
+	message += L"\nRelative processing speed: ";
 	double mul = (double)media / (double)elapsed;
 	message.AppendFormat( L"%g", mul );
 
-	MessageBox( message, L"转写完成", MB_OK | MB_ICONINFORMATION );
+	MessageBox( message, L"Transcription complete", MB_OK | MB_ICONINFORMATION );
 	return 0;
 }
 

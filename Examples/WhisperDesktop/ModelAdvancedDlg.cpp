@@ -12,13 +12,14 @@ LRESULT ModelAdvancedDlg::onInitDialog( UINT nMessage, WPARAM wParam, LPARAM lPa
 {
 	cbWave = GetDlgItem( IDC_WAVE );
 	cbReshapedMatMul = GetDlgItem( IDC_RESHAPED_MAT_MUL );
+	cbFp16 = GetDlgItem( IDC_FP16 );
 	cbAdapter = GetDlgItem( IDC_GPU );
 	const uint32_t flags = appState.gpuFlagsLoad();
 
 	// Setup the "Compute shaders" combobox
-	cbWave.AddString( L"AMD 使用 Wave64 着色器" );
-	cbWave.AddString( L"始终使用 Wave32" );
-	cbWave.AddString( L"始终使用 Wave64" );
+	cbWave.AddString( L"AMD use Wave64 shaders" );
+	cbWave.AddString( L"Always use Wave32" );
+	cbWave.AddString( L"Always use Wave64" );
 	int i = 0;
 	if( 0 != ( flags & (uint32_t)eGpuModelFlags::Wave32 ) )
 		i = 1;
@@ -27,9 +28,9 @@ LRESULT ModelAdvancedDlg::onInitDialog( UINT nMessage, WPARAM wParam, LPARAM lPa
 	cbWave.SetCurSel( i );
 
 	// Setup the "Reshaped multiply" combobox
-	cbReshapedMatMul.AddString( L"AMD 自动重排" );
-	cbReshapedMatMul.AddString( L"禁用重排" );
-	cbReshapedMatMul.AddString( L"部分重排" );
+	cbReshapedMatMul.AddString( L"AMD auto reshaped multiply" );
+	cbReshapedMatMul.AddString( L"Disable reshaped multiply" );
+	cbReshapedMatMul.AddString( L"Partial reshaped multiply" );
 	i = 0;
 	if( 0 != ( flags & (uint32_t)eGpuModelFlags::NoReshapedMatMul ) )
 		i = 1;
@@ -37,11 +38,22 @@ LRESULT ModelAdvancedDlg::onInitDialog( UINT nMessage, WPARAM wParam, LPARAM lPa
 		i = 2;
 	cbReshapedMatMul.SetCurSel( i );
 
-	cbAdapter.AddString( L"使用默认" );
+	// Setup the "FP16 math" combobox
+	cbFp16.AddString( L"Auto FP16 math" );
+	cbFp16.AddString( L"Disable FP16 math" );
+	cbFp16.AddString( L"Force FP16 math" );
+	i = 0;
+	if( 0 != ( flags & (uint32_t)eGpuModelFlags::NoFp16Compute ) )
+		i = 1;
+	else if( 0 != ( flags & (uint32_t)eGpuModelFlags::UseFp16Compute ) )
+		i = 2;
+	cbFp16.SetCurSel( i );
+
+	cbAdapter.AddString( L"Use default" );
 	HRESULT hr = Whisper::listGPUs( &addGpu, &cbAdapter );
 	if( FAILED( hr ) )
 	{
-		reportError( m_hWnd, L"无法枚举 GPU", L"", hr );
+		reportError( m_hWnd, L"Failed to enumerate GPUs", L"", hr );
 		return 0;
 	}
 	const CString setting = appState.stringLoad( L"gpu" );
@@ -75,6 +87,12 @@ void ModelAdvancedDlg::onOk()
 		flags |= (uint32_t)eGpuModelFlags::NoReshapedMatMul;
 	else if( 2 == i )
 		flags |= (uint32_t)eGpuModelFlags::UseReshapedMatMul;
+
+	i = cbFp16.GetCurSel();
+	if( 1 == i )
+		flags |= (uint32_t)eGpuModelFlags::NoFp16Compute;
+	else if( 2 == i )
+		flags |= (uint32_t)eGpuModelFlags::UseFp16Compute;
 
 	// Save to registry
 	appState.gpuFlagsStore( flags );

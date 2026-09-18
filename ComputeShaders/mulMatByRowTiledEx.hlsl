@@ -6,6 +6,17 @@ static const uint TILE_SIZE = 32;
 static const uint THREADS_Y = 8;
 #endif
 
+#ifdef F16_MATH
+// FP16 math variant: operands are converted to min-precision FP16 before the multiply,
+// the product is accumulated in FP32. FP16 FMA runs at 2x rate on GPUs which support it;
+// on other GPUs min16float degrades to FP32 and the numerics stay the same.
+#define G_TYPE min16float
+#define G_TYPE4 min16float4
+#else
+#define G_TYPE float
+#define G_TYPE4 float4
+#endif
+
 // First tensor, reshaped into dense column major horizontal panels of size [ width, TILE_SIZE ]
 Buffer<float> arg0: register( t0 );
 // Second tensor, reshaped into dense column major horizontal panels of size [ width, TILE_SIZE ]
@@ -71,7 +82,11 @@ void main( const uint3 group: SV_GroupID, const uint3 thread : SV_GroupThreadID 
 		// Now we have [ TILE_SIZE, THREADS_Y * 4 ] block from the first source tensor in the v0 vector,
 		// and [ THREADS_Y * 4 ] row from the second one in the v1 vector
 		// Multiply and accumulate.
+#ifdef F16_MATH
+		acc += ( float4 )( ( G_TYPE4 )v0 * ( G_TYPE4 )v1 );
+#else
 		acc = mad( v0, v1, acc );
+#endif
 	}
 
 	// Handle the remainder columns, if any.
@@ -90,7 +105,11 @@ void main( const uint3 group: SV_GroupID, const uint3 thread : SV_GroupThreadID 
 				v1[ j ] = arg1[ rsi.y ];
 			}
 		}
+#ifdef F16_MATH
+		acc += ( float4 )( ( G_TYPE4 )v0 * ( G_TYPE4 )v1 );
+#else
 		acc = mad( v0, v1, acc );
+#endif
 	}
 
 	// We now have [ TILE_SIZE, THREADS_Y * 4 ] block in the local variables of this thread group

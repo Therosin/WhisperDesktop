@@ -1,6 +1,7 @@
 #pragma once
 #include "../../ComLightLib/comLightCommon.h"
 #include "MfStructs.h"
+#include <stddef.h>
 
 struct IMFSourceReader;
 
@@ -31,6 +32,14 @@ namespace Whisper
 
 		virtual HRESULT COMLIGHTCALL getReader( IMFSourceReader** pp ) const = 0;
 		virtual const sCaptureParams& COMLIGHTCALL getParams() const = 0;
+	};
+
+	struct DECLSPEC_NOVTABLE iWasmCapture : public ComLight::IUnknown
+	{
+		DEFINE_INTERFACE_ID( "{efb26d62-9f6f-4a71-9b1e-7d54d5f3642b}" );
+
+		virtual uint32_t COMLIGHTCALL channels() const = 0;
+		virtual HRESULT COMLIGHTCALL getSample( const float** pp, size_t& countFloats ) = 0;
 	};
 
 	struct DECLSPEC_NOVTABLE iMediaFoundation : public ComLight::IUnknown

@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 #include "MfStructs.h"
 struct IMFSourceReader;
 
@@ -24,6 +25,18 @@ namespace Whisper
 	{
 		HRESULT __stdcall getReader( IMFSourceReader** pp ) const;
 		const sCaptureParams& __stdcall getParams() const;
+	};
+
+	// Optional interface implemented by the WASAPI loopback capture object, see captureOpenSystemAudio().
+	// The object returns PCM resampled to SAMPLE_RATE float, already downmixed to 1 or 2 channels,
+	// so it can be fed into the regular audio capture pipeline without Media Foundation.
+	__interface __declspec( novtable, uuid( "efb26d62-9f6f-4a71-9b1e-7d54d5f3642b" ) ) iWasmCapture : public IUnknown
+	{
+		// Number of channels in the PCM data returned from getSample(), always 1 or 2.
+		uint32_t __stdcall channels() const;
+		// Pull the next chunk of interleaved float PCM at SAMPLE_RATE. The returned buffer is owned by the object,
+		// and remains valid until the next call. The method blocks until a non-empty chunk is available.
+		HRESULT __stdcall getSample( const float** pp, size_t& countFloats );
 	};
 
 	__interface __declspec( novtable, uuid( "fb9763a5-d77d-4b6e-aff8-f494813cebd8" ) ) iMediaFoundation : public IUnknown

@@ -2,7 +2,7 @@
 #include "stdafx.h"
 #include "shaderNames.h"
 
-static const std::array<const char*, 45> s_shaderNames = 
+static const std::array<const char*, 55> s_shaderNames = 
 {
 	"add",
 	"addInPlace",
@@ -30,7 +30,12 @@ static const std::array<const char*, 45> s_shaderNames =
 	"mulMatByRow",
 	"mulMatByRowTiled",
 	"mulMatByRowTiledEx",
+	"mulMatByRowTiledExF16",
+	"mulMatByRowTiledF16",
+	"mulMatByRowTiledQ40",
+	"mulMatByRowTiledQ41",
 	"mulMatByRowTiledQ5",
+	"mulMatByRowTiledQ51",
 	"mulMatByRowTiledQ8",
 	"mulMatByScalar",
 	"mulMatDotMain",
@@ -38,7 +43,12 @@ static const std::array<const char*, 45> s_shaderNames =
 	"mulMatMadMain",
 	"mulMatTiled",
 	"mulMatTiledEx",
+	"mulMatTiledExF16",
+	"mulMatTiledF16",
+	"mulMatTiledQ40",
+	"mulMatTiledQ41",
 	"mulMatTiledQ5",
+	"mulMatTiledQ51",
 	"mulMatTiledQ8",
 	"norm",
 	"normCompat",

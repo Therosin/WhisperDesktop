@@ -17,6 +17,17 @@ static const uint THREADS_Y = 8;
 #define STREAM_SECOND_MATRIX 1
 #endif
 
+#ifdef F16_MATH
+// FP16 math variant: operands and partial accumulators are min-precision FP16,
+// converted to FP32 once per tile. FP16 FMA runs at 2x rate on GPUs which support it;
+// on other GPUs min16float degrades to FP32 and the numerics stay the same.
+#define G_TYPE min16float
+#define G_TYPE4 min16float4
+#else
+#define G_TYPE float
+#define G_TYPE4 float4
+#endif
+
 // First tensor, reshaped into dense column major horizontal panels of size [ width, TILE_SIZE ]
 Buffer<float> arg0: register( t0 );
 // Second tensor, reshaped into dense column major horizontal panels of size [ width, TILE_SIZE ]
@@ -39,10 +50,10 @@ cbuffer Constants: register( b0 )
 }
 
 // A smaller tile loaded from the first source matrix
-groupshared float tile0[ TILE_HEIGHT ][ TILE_SIZE ];
+groupshared G_TYPE tile0[ TILE_HEIGHT ][ TILE_SIZE ];
 #if !STREAM_SECOND_MATRIX
 // A smaller tile loaded from the second source matrix
-groupshared float tile1[ TILE_HEIGHT ][ TILE_SIZE ];
+groupshared G_TYPE tile1[ TILE_HEIGHT ][ TILE_SIZE ];
 #endif
 
 // Count of FP32 accumulators we need in every thread of the shader
@@ -57,12 +68,12 @@ void multiplyTiles( const uint3 thread, uint rsi, const uint h, inout float4 acc
 	[unroll]
 	for( uint iv = 0; iv < heightVectors; iv++, rsi4 += THREADS_Y * 4 )
 	{
-		float4 r = 0.0;
+		G_TYPE4 r = 0.0;
 		uint4 rsiRow = rsi4;
 		for( uint j = 0; j < h; j++, rsiRow += TILE_SIZE )
 		{
-			const float a = tile0[ j ][ thread.x ];
-			float4 b = 0.0;
+			const G_TYPE a = tile0[ j ][ thread.x ];
+			G_TYPE4 b = 0.0;
 			[unroll]
 			for( uint k = 0; k < 4; k++ )
 			{
@@ -70,7 +81,7 @@ void multiplyTiles( const uint3 thread, uint rsi, const uint h, inout float4 acc
 			}
 			r = mad( a, b, r );
 		}
-		acc[ iv ] += r;
+		acc[ iv ] += ( float4 )r;
 	}
 }
 #else
@@ -79,11 +90,11 @@ void multiplyTiles( const uint3 thread, inout float4 acc[ heightVectors ] )
 	[unroll]
 	for( uint i = 0; i < heightVectors; i++ )
 	{
-		float4 r = 0.0;
+		G_TYPE4 r = 0.0;
 		for( uint j = 0; j < TILE_HEIGHT; j++ )
 		{
-			const float a = tile0[ j ][ thread.x ];
-			float4 b;
+			const G_TYPE a = tile0[ j ][ thread.x ];
+			G_TYPE4 b;
 			[unroll]
 			for( uint k = 0; k < 4; k++ )
 			{
@@ -92,7 +103,7 @@ void multiplyTiles( const uint3 thread, inout float4 acc[ heightVectors ] )
 			}
 			r = mad( a, b, r );
 		}
-		acc[ i ] += r;
+		acc[ i ] += ( float4 )r;
 	}
 }
 #endif
