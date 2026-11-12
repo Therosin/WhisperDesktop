@@ -96,8 +96,12 @@ namespace
 		// while the model is busy, audio keeps being spooled here as fixed-size chunks.
 		std::deque<std::unique_ptr<TranscribeBufferObj>> queue;
 		HANDLE queueEvent = nullptr;
+		HANDLE workerExited = nullptr;
 		std::thread worker;
 		std::atomic_bool stopWorker { false };
+		// When set, the worker abandons the remaining queue and exits.
+		// Set during a graceful stop to turn the drain into an abort.
+		std::atomic_bool abortWorker { false };
 		volatile HRESULT lastError = S_OK;
 
 		// Detach the current PCM buffer and hand it over to the transcription thread.
@@ -105,6 +109,13 @@ namespace
 
 		// The transcription thread: pops chunks from the queue, runs the model on them in order.
 		void workerMain();
+
+		// Wait for the transcription thread to exit. `timeout` in ms, INFINITE waits forever.
+		// Returns true when the worker has exited.
+		bool waitForWorker( DWORD timeout );
+
+		// Drop everything still queued and make the worker exit without transcribing it.
+		void requestAbort();
 
 		// Set the state bit, and if needed notify user with the callback.
 		HRESULT setStateFlag( eCaptureStatus newBit ) noexcept
@@ -153,8 +164,8 @@ namespace
 
 		~Capture()
 		{
-			// Stop the transcription thread. It keeps processing any remaining queued chunks,
-			// so nothing captured is ever lost.
+			// Stop the transcription thread. On the graceful path drain() has already done
+			// this; this destructor is the backstop for error paths.
 			stopWorker = true;
 			if( nullptr != queueEvent )
 				SetEvent( queueEvent );
@@ -164,6 +175,11 @@ namespace
 			{
 				CloseHandle( queueEvent );
 				queueEvent = nullptr;
+			}
+			if( nullptr != workerExited )
+			{
+				CloseHandle( workerExited );
+				workerExited = nullptr;
 			}
 		}
 
@@ -176,7 +192,19 @@ namespace
 			return callbacks.shouldCancel( callbacks.pv );
 		}
 
+		HRESULT checkAbort() noexcept
+		{
+			if( nullptr == callbacks.shouldAbort )
+				return S_OK;
+			return callbacks.shouldAbort( callbacks.pv );
+		}
+
 		HRESULT run();
+
+		// Stop reading audio, flush the current PCM buffer, and transcribe all queued chunks
+		// before returning. While the worker is draining, the shouldAbort callback (when set)
+		// abandons the remaining queue and returns early.
+		void drain();
 	};
 
 	HRESULT Capture::startup( const iAudioCapture* ac )
@@ -185,6 +213,13 @@ namespace
 		queueEvent = CreateEvent( nullptr, FALSE, FALSE, nullptr );
 		if( nullptr == queueEvent )
 			return HRESULT_FROM_WIN32( GetLastError() );
+		workerExited = CreateEvent( nullptr, FALSE, FALSE, nullptr );
+		if( nullptr == workerExited )
+		{
+			CloseHandle( queueEvent );
+			queueEvent = nullptr;
+			return HRESULT_FROM_WIN32( GetLastError() );
+		}
 
 		stopWorker = false;
 		try
@@ -195,6 +230,8 @@ namespace
 		{
 			CloseHandle( queueEvent );
 			queueEvent = nullptr;
+			CloseHandle( workerExited );
+			workerExited = nullptr;
 			return HRESULT_FROM_WIN32( ex.code().value() );
 		}
 
@@ -398,7 +435,12 @@ namespace
 			{
 				using lock = CComCritSecLock<CComAutoCriticalSection>;
 				lock critSec0{ critSec };
-				if( !queue.empty() )
+				if( abortWorker )
+				{
+					// Abort requested: drop everything still queued and leave immediately.
+					queue.clear();
+				}
+				else if( !queue.empty() )
 				{
 					chunk = std::move( queue.front() );
 					queue.pop_front();
@@ -439,7 +481,7 @@ namespace
 					lock critSec0{ critSec };
 					drained = queue.empty();
 				}
-				if( drained )
+				if( drained || abortWorker )
 					clearStateFlag( eCaptureStatus::Transcribing );
 				continue;
 			}
@@ -448,6 +490,49 @@ namespace
 				break;
 			WaitForSingleObject( queueEvent, INFINITE );
 		}
+		SetEvent( workerExited );
+	}
+
+	void Capture::drain()
+	{
+		// The capture loop exited (cancel requested). Stop reading audio and hand the
+		// current PCM buffer over as the final chunk, so the transcription tail is never lost.
+		setStateFlag( eCaptureStatus::Stopping );
+		submitChunk();
+		stopWorker = true;
+		SetEvent( queueEvent );
+
+		// Transcribe everything already captured. While draining, an optional abort
+		// request drops the remaining queue and returns as soon as the model is done
+		// with the chunk it's currently working on.
+		const bool pollAbort = nullptr != callbacks.shouldAbort;
+		for( ;; )
+		{
+			if( pollAbort && S_FALSE == checkAbort() )
+				requestAbort();
+			if( waitForWorker( pollAbort ? 16 : INFINITE ) )
+				break;
+		}
+		clearStateFlag( eCaptureStatus::Stopping );
+	}
+
+	bool Capture::waitForWorker( DWORD timeout )
+	{
+		return WaitForSingleObject( workerExited, timeout ) == WAIT_OBJECT_0;
+	}
+
+	void Capture::requestAbort()
+	{
+		abortWorker = true;
+		stopWorker = true;
+		// Drop the queued chunks immediately, so a worker waiting on queueEvent wakes
+		// up, sees the empty queue and exits.
+		{
+			using lock = CComCritSecLock<CComAutoCriticalSection>;
+			lock critSec0{ critSec };
+			queue.clear();
+		}
+		SetEvent( queueEvent );
 	}
 
 	size_t Capture::detectVoice()
@@ -483,10 +568,15 @@ HRESULT COMLIGHTCALL ContextImpl::runCapture( const sFullParams& params, const s
 
 	while( true )
 	{
-		HRESULT hr = capture.checkCancel();
+		const HRESULT hr = capture.checkCancel();
 		CHECK( hr );
 		if( hr != S_OK )
-			return S_OK;
+			break;	// User requested stop: drain the queued chunks below
 		CHECK( capture.run() );
 	}
+
+	// Graceful stop: stop reading, flush the current utterance, and transcribe everything
+	// already captured. An abort request (second click) drops the remaining queue.
+	capture.drain();
+	return S_OK;
 }

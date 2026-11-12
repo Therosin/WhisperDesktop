@@ -1,5 +1,5 @@
 #include "textWriter.h"
-#include "../../ComLightLib/comLightClient.h"
+#include "../ComLightLib/comLightClient.h"
 #include <array>
 #define WIN32_LEAN_AND_MEAN
 #include <pathcch.h>

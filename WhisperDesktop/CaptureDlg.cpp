@@ -214,8 +214,19 @@ void CaptureDlg::onRunCapture()
 {
 	if( captureRunning )
 	{
-		threadState.stopRequested = true;
-		btnRunCapture.EnableWindow( FALSE );
+		if( threadState.stopRequested )
+		{
+			// Second click: the stop-drain is in progress. Abandon the remaining queued chunks.
+			threadState.abortRequested = true;
+			btnRunCapture.EnableWindow( FALSE );
+		}
+		else
+		{
+			// First click: stop reading audio and transcribe everything already captured.
+			// The button stays enabled so the user can abort the drain with a second click.
+			threadState.stopRequested = true;
+			btnRunCapture.SetWindowText( L"Abort" );
+		}
 		return;
 	}
 
@@ -253,6 +264,7 @@ void CaptureDlg::onRunCapture()
 	captureRunning = true;
 	threadState.errorMessage = L"";
 	threadState.stopRequested = false;
+	threadState.abortRequested = false;
 	threadState.captureParams.minDuration = 7;
 	threadState.captureParams.maxDuration = 11;
 	setPending( true );
@@ -376,8 +388,9 @@ inline HRESULT CaptureDlg::runCapture()
 	fullParams.new_segment_callback = &newSegmentCallback;
 	fullParams.new_segment_callback_user_data = this;
 
-	sCaptureCallbacks callbacks;
+	sCaptureCallbacks callbacks = {};
 	callbacks.shouldCancel = &cbCancel;
+	callbacks.shouldAbort = &cbAbort;
 	callbacks.captureStatus = &cbStatus;
 	callbacks.pv = this;
 
@@ -444,6 +457,12 @@ HRESULT __stdcall CaptureDlg::cbCancel( void* pv ) noexcept
 {
 	const bool stopRequested = ( (CaptureDlg*)pv )->threadState.stopRequested;
 	return stopRequested ? S_FALSE : S_OK;
+}
+
+HRESULT __stdcall CaptureDlg::cbAbort( void* pv ) noexcept
+{
+	const bool abortRequested = ( (CaptureDlg*)pv )->threadState.abortRequested;
+	return abortRequested ? S_FALSE : S_OK;
 }
 
 HRESULT __stdcall CaptureDlg::cbStatus( void* pv, Whisper::eCaptureStatus status ) noexcept

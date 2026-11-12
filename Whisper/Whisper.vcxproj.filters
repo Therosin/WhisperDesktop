@@ -2,16 +2,13 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="DllMain.cpp" />
-    <ClCompile Include="whisperCom.cpp" />
     <ClCompile Include="source\ggml.c" />
-    <ClCompile Include="source\whisper.cpp" />
     <ClCompile Include="ML\ConstantBuffer.cpp" />
     <ClCompile Include="D3D\MappedResource.cpp" />
     <ClCompile Include="D3D\shaders.cpp" />
     <ClCompile Include="D3D\createBuffer.cpp" />
     <ClCompile Include="ML\TempBuffers.cpp" />
     <ClCompile Include="ML\MlContext.cpp" />
-    <ClCompile Include="ML\tensorOpsTests.cpp" />
     <ClCompile Include="D3D\Binder.cpp" />
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="ML\testUtils.cpp" />
@@ -49,7 +46,6 @@
     <ClCompile Include="MF\MediaFoundation.cpp" />
     <ClCompile Include="MF\loadAudioFile.cpp" />
     <ClCompile Include="MF\mfUtils.cpp" />
-    <ClCompile Include="source.compat\convertThings.cpp" />
     <ClCompile Include="source.compat\ggmlMsvc.c" />
     <ClCompile Include="Whisper\ContextImpl.misc.cpp" />
     <ClCompile Include="Utils\Trace\TraceWriter.cpp" />
@@ -95,7 +91,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\ggml.h" />
-    <ClInclude Include="source\whisper.h" />
     <ClInclude Include="API\iContext.cl.h" />
     <ClInclude Include="API\sFullParams.h" />
     <ClInclude Include="D3D\device.h" />
@@ -106,7 +101,6 @@
     <ClInclude Include="D3D\createBuffer.h" />
     <ClInclude Include="ML\TempBuffers.h" />
     <ClInclude Include="ML\MlContext.h" />
-    <ClInclude Include="ML\tensorOpsTests.h" />
     <ClInclude Include="D3D\Binder.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="ML\testUtils.h" />
@@ -115,7 +109,6 @@
     <ClInclude Include="D3D\RenderDoc\renderDoc.h" />
     <ClInclude Include="Whisper\MelInputTensor.h" />
     <ClInclude Include="Whisper\ModelBuffers.h" />
-    <ClInclude Include="Whisper\ModelLoader.h" />
     <ClInclude Include="ML\TensorShape.h" />
     <ClInclude Include="ML\Tensor.h" />
     <ClInclude Include="ML\TensorGpuViews.h" />
@@ -152,7 +145,6 @@
     <ClInclude Include="API\SpecialTokens.h" />
     <ClInclude Include="Whisper\sTokenData.h" />
     <ClInclude Include="resource.h" />
-    <ClInclude Include="source.compat\convertThings.h" />
     <ClInclude Include="Utils\Trace\TraceWriter.h" />
     <ClInclude Include="Utils\Trace\TraceStructures.h" />
     <ClInclude Include="Utils\Trace\tracing.h" />

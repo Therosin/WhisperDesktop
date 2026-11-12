@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <thread>
 #include "miscUtils.h"
-#include "../../Whisper/API/iContext.cl.h"
+#include "../Whisper/API/iContext.cl.h"
 
 whisper_params::whisper_params()
 {

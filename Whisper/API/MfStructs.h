@@ -37,11 +37,20 @@ namespace Whisper
 		Listening = 1,
 		Voice = 2,
 		Transcribing = 4,
+		// Capture loop has stopped reading audio and is draining the queued chunks.
+		// The engine keeps transcribing already captured chunks; another abort request
+		// drops the remaining queue and returns immediately.
+		Stopping = 0x10,
 		Stalled = 0x80,
 	};
 
 	// Return S_OK to continue, or S_FALSE to stop the capture session
 	using pfnShouldCancel = HRESULT( __stdcall* )( void* pv ) noexcept;
+
+	// Optional. When set, return S_FALSE to abort a pending drain: queued (but not yet
+	// transcribed) chunks are dropped and runCapture returns without transcribing them.
+	// While the model is mid-chunk, it still finishes the current chunk before returning.
+	using pfnShouldAbort = HRESULT( __stdcall* )( void* pv ) noexcept;
 
 	using pfnCaptureStatus = HRESULT( __stdcall* )( void* pv, eCaptureStatus status ) noexcept;
 
@@ -50,5 +59,7 @@ namespace Whisper
 		pfnShouldCancel shouldCancel;
 		pfnCaptureStatus captureStatus;
 		void* pv;
+		// Optional; may be null. See pfnShouldAbort.
+		pfnShouldAbort shouldAbort = nullptr;
 	};
 }

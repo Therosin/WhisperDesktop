@@ -12,8 +12,7 @@ namespace Whisper
 		// Not implemented in the published builds of the DLL. To enable, change BUILD_HYBRID_VERSION macro to 1
 		Hybrid = 2,
 
-		// A reference implementation which uses the original GGML CPU-running code
-		// Not implemented in the published builds of the DLL. To enable, change BUILD_BOTH_VERSIONS macro to 1
+		// Reserved for the removed reference CPU implementation; returns E_NOTIMPL.
 		Reference = 3,
 	};
 

@@ -110,7 +110,4 @@ namespace DirectCompute
 		HRESULT createClone( const ModelBuffers& rsi );
 	};
 
-#if BUILD_BOTH_VERSIONS
-	extern const ModelBuffers& gpuModel;
-#endif
 }

@@ -1,54 +1,5 @@
 #include "stdafx.h"
-#include "ModelLoader.h"
-
-
-#if BUILD_BOTH_VERSIONS
-namespace DirectCompute
-{
-	static ModelBuffers s_model;
-	const ModelBuffers& gpuModel = s_model;
-}
-
-using namespace DirectCompute;
-
-ModelLoader::ModelLoader( int encoderLayers, int decoderLayers ) :
-	model( s_model )
-{
-	if( encoderLayers <= 0 || decoderLayers <= 0 )
-		throw E_INVALIDARG;
-	model.enc.layers.resize( (uint32_t)encoderLayers );
-	model.dec.layers.resize( (uint32_t)decoderLayers );
-}
-
-void ModelLoader::add( const ggml_tensor* ggml, Tensor& gpu )
-{
-	if( nullptr == ggml )
-		throw E_POINTER;
-
-	auto res = map.try_emplace( ggml, &gpu );
-	if( !res.second )
-		throw E_INVALIDARG;
-}
-
-Tensor* ModelLoader::lookup( const ggml_tensor* ggml ) const
-{
-	auto it = map.find( ggml );
-	if( it == map.end() )
-		return nullptr;
-	return it->second;
-}
-
-bool ModelLoader::tryLoad( const ggml_tensor* ggml )
-{
-	Tensor* rdi = lookup( ggml );
-	if( nullptr == rdi )
-		return false;
-	HRESULT hr = rdi->create( *ggml, eBufferUse::Immutable, true );
-	if( SUCCEEDED( hr ) )
-		return true;
-	throw hr;
-}
-#endif
+#include "ModelBuffers.h"
 
 __m128i __declspec( noinline ) DirectCompute::TensorPair::getMemoryUse() const
 {

@@ -162,7 +162,6 @@
     <ClCompile Include="Utils\Trace\tracing.cpp" />
     <ClCompile Include="Utils\Trace\TraceStructures.cpp" />
     <ClCompile Include="Utils\Trace\TraceWriter.cpp" />
-    <ClCompile Include="source.compat\convertThings.cpp" />
     <ClCompile Include="D3D\shaderNames.cpp" />
     <ClCompile Include="MF\mfUtils.cpp" />
     <ClCompile Include="MF\loadAudioFile.cpp" />
@@ -212,12 +211,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="source\whisper.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-    </ClCompile>
     <ClCompile Include="ML\TempBuffers.cpp" />
-    <ClCompile Include="ML\tensorOpsTests.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -226,7 +220,6 @@
     <ClCompile Include="ML\Tensor.cpp" />
     <ClCompile Include="ML\TensorGpuViews.cpp" />
     <ClCompile Include="ML\TensorEx.cpp" />
-    <ClCompile Include="whisperCom.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="API\iContext.h" />
@@ -284,7 +277,6 @@
     <ClInclude Include="Utils\Trace\tracing.h" />
     <ClInclude Include="Utils\Trace\TraceStructures.h" />
     <ClInclude Include="Utils\Trace\TraceWriter.h" />
-    <ClInclude Include="source.compat\convertThings.h" />
     <ClInclude Include="MF\mfUtils.h" />
     <ClInclude Include="MF\loadAudioFile.h" />
     <ClInclude Include="MF\mfStartup.h" />
@@ -325,7 +317,6 @@
     <ClInclude Include="Whisper\sEncodeParams.h" />
     <ClInclude Include="Whisper\WhisperContext.h" />
     <ClInclude Include="Whisper\ModelBuffers.h" />
-    <ClInclude Include="Whisper\ModelLoader.h" />
     <ClInclude Include="D3D\RenderDoc\renderdoc_app.h" />
     <ClInclude Include="D3D\shaderNames.h" />
     <ClInclude Include="D3D\shaders.h" />
@@ -334,9 +325,7 @@
     <ClInclude Include="Whisper\MelInputTensor.h" />
     <ClInclude Include="ML\TensorShape.h" />
     <ClInclude Include="source\ggml.h" />
-    <ClInclude Include="source\whisper.h" />
     <ClInclude Include="ML\TempBuffers.h" />
-    <ClInclude Include="ML\tensorOpsTests.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="ML\testUtils.h" />
     <ClInclude Include="ML\Tensor.h" />

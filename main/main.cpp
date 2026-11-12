@@ -1,7 +1,7 @@
 #include "params.h"
-#include "../../Whisper/API/iContext.cl.h"
-#include "../../Whisper/API/iMediaFoundation.cl.h"
-#include "../../ComLightLib/comLightClient.h"
+#include "../Whisper/API/iContext.cl.h"
+#include "../Whisper/API/iMediaFoundation.cl.h"
+#include "../ComLightLib/comLightClient.h"
 #include "miscUtils.h"
 #include <array>
 #include <atomic>

@@ -88,20 +88,13 @@ namespace DirectCompute
 		Tensor createTensor( eDataType type, const std::array<uint32_t, 4>& ne ) override final;
 
 	public:
-#if BUILD_BOTH_VERSIONS
-		WhisperContext();
-		~WhisperContext();
-#else
 		~WhisperContext() = default;
-#endif
 		WhisperContext( const Whisper::WhisperModel& wm, Whisper::ProfileCollection& pc );
 		WhisperContext( const WhisperContext& ) = delete;
 
 		Tensor encode( Whisper::iSpectrogram& spectrogram, const sEncodeParams& encParams );
 
 		void decode( const int* tokens, const int n_tokens, const sDecodeParams& decParams, std::vector<float>& probs, int threads );
-
-		static WhisperContext& current();
 
 		// Create a RAII object which measures both CPU and GPU time for the complete runFull() method
 		decltype( auto ) completeProfiler()

@@ -114,6 +114,8 @@ private:
 	struct sThreadState
 	{
 		volatile bool stopRequested;
+		// Second stop click while draining: drop the remaining queued chunks.
+		volatile bool abortRequested;
 		bool translate;
 		eTextFlags flags;
 		CAtlFile* file;
@@ -135,6 +137,7 @@ private:
 	LRESULT onThreadStatus( UINT nMessage, WPARAM wParam, LPARAM lParam, BOOL& bHandled );
 
 	static HRESULT __stdcall cbCancel( void* pv ) noexcept;
+	static HRESULT __stdcall cbAbort( void* pv ) noexcept;
 	static HRESULT __stdcall cbStatus( void* pv, Whisper::eCaptureStatus status ) noexcept;
 
 	static HRESULT __cdecl newSegmentCallback( Whisper::iContext* ctx, uint32_t n_new, void* user_data ) noexcept;

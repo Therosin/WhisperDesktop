@@ -1,1 +1,0 @@
-﻿This project builds the original whisper.cpp command-line sample

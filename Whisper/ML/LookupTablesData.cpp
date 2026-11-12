@@ -1,7 +1,6 @@
 #include "stdafx.h"
 #include "LookupTablesData.h"
 #include <immintrin.h>
-#include <atlfile.h>
 #include <Utils/LZ4/lz4.h>
 using namespace DirectCompute;
 
@@ -61,10 +60,4 @@ LookupTablesData::LookupTablesData()
 	}
 #endif
 
-#if false
-	// Temporary code to save the content of these lookup tables
-	CAtlFile tempFile;
-	tempFile.Create( LR"(C:\Temp\2remove\Whisper\tables.bin)", GENERIC_WRITE, 0, CREATE_ALWAYS );
-	tempFile.Write( this, (DWORD)sizeof( *this ) );
-#endif
 }

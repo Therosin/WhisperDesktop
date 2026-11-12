@@ -103,7 +103,7 @@ To run that project, right click in visual studio, “Set as startup project”,
 When completed successfully, you should see a console window with a line like that:<br/>
 `Compressed 46 compute shaders, 123.5 kb -> 18.0 kb`
 
-5. Build `Whisper` project to get the native DLL, or `WhisperNet` for the C# wrapper and nuget package, or the examples.
+5. Build `Whisper` for the native DLL, `WhisperNet` for the C# wrapper and NuGet package, `WhisperDesktop` for the desktop app, or `main` for the command-line app. The C# examples remain in `Examples`.
 
 ## Other Notes
 
@@ -118,7 +118,7 @@ When launched your program from RenderDoc, hold F12 key to capture the compute c
 If you gonna debug HLSL shaders, use the debug build of the DLL, it includes debug build of the shaders and you’ll get better UX in the debugger.
 
 The repository includes a lot of code which was only used for development:
-couple alternative model implementations, compatible FP64 versions of some compute shaders, debug tracing and the tool to compare the traces, etc.<br/>
+an alternative hybrid model implementation, compatible FP64 versions of some compute shaders, debug tracing and the tool to compare the traces, etc.<br/>
 That stuff is disabled by preprocessor macros or `constexpr` flags, I hope it’s fine to keep here.
 
 ## Performance Notes

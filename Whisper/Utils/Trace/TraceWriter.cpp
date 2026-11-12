@@ -210,54 +210,7 @@ HRESULT iTraceWriter::tensor( const ItemName& name, const CpuCompute::Tensor& so
 		return E_NOTIMPL;
 }
 
-#if BUILD_BOTH_VERSIONS
-#include "../../source/ggml.h"
-HRESULT __declspec( noinline ) iTraceWriter::tensor( const ItemName& name, const ggml_tensor& source )
-{
-	__m128i size = load16( source.ne );
-	__m128i strides = _mm_setr_epi32(
-		(int)(uint32_t)source.nb[ 0 ],
-		(int)(uint32_t)source.nb[ 1 ],
-		(int)(uint32_t)source.nb[ 2 ],
-		(int)(uint32_t)source.nb[ 3 ] );
-
-	const __m128i ones = _mm_set1_epi32( 1 );
-	switch( source.n_dims )
-	{
-	case 0:
-		size = ones;
-		break;
-	case 1:
-		size = _mm_blend_epi16( size, ones, 0b11111100 );
-		break;
-	case 2:
-		size = _mm_blend_epi16( size, ones, 0b11110000 );
-		break;
-	case 3:
-		size = _mm_blend_epi16( size, ones, 0b11000000 );
-		break;
-	case 4:
-		break;
-	default:
-		return E_INVALIDARG;
-	}
-
-	const ggml_type dt = source.type;
-	switch( dt )
-	{
-	case GGML_TYPE_F16:
-		strides = _mm_srli_epi32( strides, 1 );
-		return tensor( name, source.data, size, strides, eDataType::FP16 );
-	case GGML_TYPE_F32:
-		strides = _mm_srli_epi32( strides, 2 );
-		return tensor( name, source.data, size, strides, eDataType::FP32 );
-	default:
-		return E_NOTIMPL;
-}
-}
-#else
 HRESULT iTraceWriter::tensor( const ItemName& name, const ggml_tensor& source )
 {
 	return E_NOTIMPL;
 }
-#endif

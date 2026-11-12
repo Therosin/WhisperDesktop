@@ -707,7 +707,9 @@ HRESULT COMLIGHTCALL ContextImpl::runFullImpl( const sFullParams& params, const 
 					{
 						const bool speedUp = params.flag( eFullParamsFlags::SpeedupAudio );
 						const int tt0 = speedUp ? 2 * t0 : t0;
-						const int tt1 = speedUp ? 2 * t1 : t1;
+						// Decoder timestamp tokens can run past the real audio end into the zero-padded
+						// tail of the fixed-size encode window; clamp the segment end to the audio length.
+						const int tt1 = std::min( speedUp ? 2 * t1 : t1, seek_end );
 
 						if( params.flag( eFullParamsFlags::PrintRealtime ) )
 						{
@@ -748,7 +750,10 @@ HRESULT COMLIGHTCALL ContextImpl::runFullImpl( const sFullParams& params, const 
 
 			if( !text.empty() )
 			{
-				const int t1 = seek + seek_delta;
+				// The decoder can stamp timestamps into the zero-padded tail of the fixed-size
+				// encode window (up to 30s), well past the actual end of this chunk's audio.
+				// Clamp the end of the final segment to the real audio length.
+				const int t1 = std::min( seek + seek_delta, seek_end );
 
 				const bool speedUp = params.flag( eFullParamsFlags::SpeedupAudio );
 				const int tt0 = speedUp ? 2 * t0 : t0;

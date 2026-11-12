@@ -85,47 +85,6 @@ WhisperContext::WhisperContext( const Whisper::WhisperModel& wm, Whisper::Profil
 	}
 }
 
-#if BUILD_BOTH_VERSIONS
-namespace
-{
-	thread_local WhisperContext* ts_context = nullptr;
-	const ModelBuffers& getGlobalModel()
-	{
-		return gpuModel;
-	}
-}
-
-/*
-WhisperContext::WhisperContext() :
-	gpuModel( getGlobalModel() ),
-{
-	if( nullptr != ts_context )
-		throw HRESULT_FROM_WIN32( ERROR_ALREADY_INITIALIZED );
-	ts_context = this;
-}*/
-
-WhisperContext::~WhisperContext()
-{
-	Tracing::traceClose();
-	if( ts_context == nullptr )
-		return;
-	assert( ts_context == this );
-	ts_context = nullptr;
-}
-
-WhisperContext& WhisperContext::current()
-{
-	WhisperContext* c = ts_context;
-	if( nullptr == c )
-		throw OLE_E_BLANK;
-	return *c;
-}
-#else
-WhisperContext& WhisperContext::current()
-{
-	throw E_NOTIMPL;
-}
-#endif
 
 Tensor WhisperContext::createTensor( eDataType type, const std::array<uint32_t, 4>& ne )
 {

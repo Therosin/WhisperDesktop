@@ -26,9 +26,6 @@
 #include "Utils/Logger.h"
 #include "Utils/miscUtils.h"
 
-// Build both legacy and DirectCompute implementations
-#define BUILD_BOTH_VERSIONS 0
-
 // Build hybrid model which uses DirectCompute only for the encode step of the algorithm, and decodes on CPU, using AVX SIMD and the Windows' built-in thread pool.
 // Disabled because on all computers I have in this house that hybrid model performed worse than D3D11 GPGPU model
 #define BUILD_HYBRID_VERSION 0

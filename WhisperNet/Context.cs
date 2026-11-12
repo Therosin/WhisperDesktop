@@ -182,6 +182,7 @@ namespace Whisper
 				if( captureCallbacks != null )
 				{
 					cc.shouldCancel = captureCallbacks.cancel( this );
+					cc.shouldAbort = captureCallbacks.abort( this );
 					cc.captureStatus = captureCallbacks.status( this );
 				}
 				context.runCapture( ref fullParams, ref cc, capture );

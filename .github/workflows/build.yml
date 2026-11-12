@@ -1,4 +1,4 @@
-name: Build Examples
+name: Build Applications
 
 on:
   push:
@@ -43,12 +43,12 @@ jobs:
         shell: pwsh
         run: dotnet run --project Tools\CompressShaders\CompressShaders.csproj -c Release
 
-      - name: Build WhisperDesktop and main examples
+      - name: Build WhisperDesktop and main
         shell: pwsh
         run: >
           msbuild ${{ env.SOLUTION }}
           /p:Configuration=${{ env.CONFIGURATION }} /p:Platform=x64 /m /v:m
-          '/t:Examples\WhisperDesktop;Examples\main'
+          '/t:WhisperDesktop;main'
           /p:BuildProjectReferences=true
 
       - name: Collect binaries
@@ -67,9 +67,9 @@ jobs:
           }
 
           Copy-Item ( Find-Binary 'WhisperDesktop.exe' ) "$out\WhisperDesktop\"
-          Copy-Item "Examples\WhisperDesktop\Readme.txt" "$out\WhisperDesktop\"
+          Copy-Item "WhisperDesktop\Readme.txt" "$out\WhisperDesktop\"
           Copy-Item ( Find-Binary 'main.exe' ) "$out\main\"
-          Copy-Item "Examples\main\Readme.txt" "$out\main\"
+          Copy-Item "main\Readme.txt" "$out\main\"
 
           $whisperDll = Find-Binary 'Whisper.dll'
           Copy-Item $whisperDll "$out\WhisperDesktop\"

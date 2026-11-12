@@ -14,6 +14,9 @@ namespace Whisper
 		Voice = 2,
 		/// <summary>Transcribing a recorded piece of the audio</summary>
 		Transcribing = 4,
+		/// <summary>Stop was requested: capture stopped reading audio and is draining
+		/// the already captured chunks. Return true from shouldAbort to cancel the drain.</summary>
+		Stopping = 0x10,
 		/// <summary>The computer is unable to transcribe the audio quickly enough,<br/>
 		/// and the capture is dropping the incoming audio samples.</summary>
 		Stalled = 0x80,

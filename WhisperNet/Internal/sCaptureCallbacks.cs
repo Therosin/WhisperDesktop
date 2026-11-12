@@ -8,6 +8,11 @@ namespace Whisper.Internal
 	[UnmanagedFunctionPointer( CallingConvention.StdCall )]
 	public delegate int pfnShouldCancel( IntPtr pv );
 
+	/// <summary>Unmanaged code calls this during an ongoing drain to check for an abort</summary>
+	/// <remarks>Return 0 to keep draining, or 1 to drop the remaining queued chunks and return</remarks>
+	[UnmanagedFunctionPointer( CallingConvention.StdCall )]
+	public delegate int pfnShouldAbort( IntPtr pv );
+
 	/// <summary>Unmanaged code calls this to notify about the status</summary>
 	[UnmanagedFunctionPointer( CallingConvention.StdCall )]
 	public delegate int pfnCaptureStatus( IntPtr pv, eCaptureStatus status );
@@ -21,5 +26,7 @@ namespace Whisper.Internal
 		public pfnCaptureStatus captureStatus;
 		/// <summary>Context pointer, only needed for C++ compatibility</summary>
 		public IntPtr pv;
+		/// <summary>Optional abort function pointer; zero for no abort support</summary>
+		public pfnShouldAbort shouldAbort;
 	}
 }
